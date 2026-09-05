@@ -169,6 +169,154 @@ ORDER BY n_prestamos DESC;
 
 -- BLOQUE 3. Agregación de negocio --
 --Reto 8
+SELECT producto, count(producto) AS productos
+FROM prestamos
+GROUP by producto;
+
+SELECT COUNT(pago_id) AS pagos
+FROM pagos;
+
+SELECT dias_mora, count(pago_id) AS pagos
+FROM pagos
+GROUP by dias_mora
+ORDER by dias_mora DESC;
+
+SELECT pr.prestamo_id, COUNT(pg.pago_id) AS n_pagos
+FROM prestamos pr
+LEFT JOIN pagos pg ON pr.prestamo_id = pg.prestamo_id
+GROUP BY pr.prestamo_id
+ORDER BY n_pagos DESC;
+
+SELECT pr.prestamo_id, COUNT(pg.pago_id) AS n_pagos
+FROM prestamos pr
+LEFT JOIN pagos pg ON pr.prestamo_id = pg.prestamo_id
+where dias_mora > 30;
+
+SELECT pr.producto, COUNT(pg.pago_id) AS n_pagos
+FROM prestamos pr
+LEFT JOIN pagos pg ON pr.prestamo_id = pg.prestamo_id
+--where dias_mora > 30
+GROUP BY pr.producto
+ORDER BY n_pagos DESC;
+
+SELECT pr.producto, 
+  COUNT(CASE WHEN pg.dias_mora > 30 / pg.dias_mora THEN 1 ELSE 0 END) AS mora_sup30
+FROM prestamos pr
+LEFT JOIN pagos pg ON pr.prestamo_id = pg.prestamo_id
+where dias_mora > 30
+GROUP BY pr.producto
+ORDER BY mora_sup30 DESC;
+
+SELECT pr.producto, 
+  SUM (CASE WHEN (pg.dias_mora > 30) / pg.dias_mora THEN 1 END) AS mora_sup30
+FROM prestamos pr
+LEFT JOIN pagos pg ON pr.prestamo_id = pg.prestamo_id
+GROUP BY pr.producto
+ORDER BY mora_sup30 DESC;
+
+SELECT pr.producto, 
+  SUM (CASE WHEN pg.dias_mora > 30 THEN 1 END) AS "mora sup30",
+  COUNT(PG.pago_id) AS "total cuotas",
+  ROUND(100.0 * SUM(CASE WHEN pg.dias_mora > 30 THEN 1 END)/COUNT(PG.pago_id),2) AS "% mora > 30d"
+FROM prestamos pr
+LEFT JOIN pagos pg ON pr.prestamo_id = pg.prestamo_id
+GROUP BY pr.producto
+ORDER BY "mora sup30" DESC;
+
+-- reto 9
+-- vamos por partes
+-- 1. Monto pagado total por producto
+SELECT r.producto, SUM(g.monto_pagado) AS Total_pagado
+FROM prestamos r
+JOIN pagos g ON r.prestamo_id = g.prestamo_id
+GROUP BY r.producto
+ORDER BY Total_pagado DESC;
+
+-- 2. Número de préstamos
+SELECT producto, COUNT(prestamo_id) AS "cant. préstamos"
+FROM prestamos
+GROUP BY producto
+ORDER BY "cant. préstamos" DESC;
+
+-- 3. Promedio simple tasa 
+SELECT producto, AVG(tasa_ea) AS "prom. simple"
+FROM prestamos
+GROUP BY producto
+ORDER BY "prom. simple" DESC;
+
+-- 4. Promedio ponderado por monto
+-- No necesito case when aquí
+SELECT r.producto, 
+  SUM(CASE WHEN (r.tasa_ea * monto_desembolsado) THEN 1 END) AS "tasa x pago",
+  SUM(monto_desembolsado) AS "total pagos",
+  ROUND(100.0 * SUM(CASE (WHEN r.tasa_ea * monto_desembolsado) THEN 1 END)/SUM(monto_desembolsado),2) AS "Prom. pond x pago"
+FROM prestamos r
+LEFT JOIN pagos g ON r.prestamo_id = g.prestamo_id
+GROUP BY r.producto
+ORDER BY "Prom. pond x pago" DESC;
+
+-- súper contraejemplo
+SELECT r.producto, 
+  SUM(r.tasa_ea * monto_desembolsado) AS "tasa x pago",
+  SUM(monto_desembolsado) AS "total pagos",
+  ROUND(100.0 * SUM(r.tasa_ea * monto_desembolsado)/SUM(monto_desembolsado),2) AS "Prom. pond x pago"
+FROM prestamos r
+LEFT JOIN pagos g ON r.prestamo_id = g.prestamo_id
+GROUP BY r.producto
+ORDER BY "Prom. pond x pago" DESC;
+
+SELECT producto, 
+  SUM(tasa_ea * monto_desembolsado) AS "tasa x pago",
+  SUM(monto_desembolsado) AS "total pagos",
+  ROUND(100.0 * SUM(tasa_ea * monto_desembolsado)/SUM(monto_desembolsado),2) AS "Prom. pond x pago"
+FROM prestamos
+GROUP BY producto
+ORDER BY "Prom. pond x pago" DESC;
+
+SELECT producto,
+  SUM(tasa_ea * monto_desembolsado) AS suma_ponderada,
+  SUM(monto_desembolsado) AS suma_montos,
+  ROUND(SUM(tasa_ea * monto_desembolsado) / SUM(monto_desembolsado), 4) AS tasa_ponderada
+FROM prestamos
+GROUP BY producto
+ORDER BY tasa_ponderada DESC;
+
+-- reto 10. Distribución de pagos por cubeta de mora
+SELECT tasa_ea FROM prestamos LIMIT 5;
+
+SELECT dias_mora, COUNT(pago_id) AS "Cant. pagos"
+FROM pagos
+GROUP by dias_mora;
+
+-- error
+SELECT dias_mora, 
+  COUNT(CASE WHEN dias_mora <=0 THEN "Al día" 
+        ELSE dias_mora BETWEEN 1 AND 30 then "1-30"
+        ELSE dias_mora BETWEEN 31 AND 60 then "31-60"
+        ELSE dias_mora BETWEEN 61 AND 90 then "61-90"
+        ELSE dias_mora > 90 then "90+" END) AS "Cubeta mora",
+  COUNT(pago_id) AS "Cant. pagos"
+  ROUND("Cubeta mora")/COUNT(pago_id) AS "Porc. del total"
+FROM pagos
+GROUP BY dias_mora
+
+-- correcto
+SELECT 
+  CASE WHEN dias_mora <=0 THEN 'Al día' 
+       WHEN dias_mora BETWEEN 1 AND 30 then '1-30'
+       WHEN dias_mora BETWEEN 31 AND 60 then '31-60'
+       WHEN dias_mora BETWEEN 61 AND 90 then '61-90'
+       ELSE '90+' END AS "Cubeta mora",
+  COUNT(pago_id) AS "Cant. pagos",
+  ROUND(COUNT(pago_id)*100.0 / (SELECT COUNT(pago_id) FROM pagos), 2) As "porc. del total"
+FROM pagos
+GROUP BY "Cubeta mora"
+order by "porc. del total" DESC;
+
+SELECT COUNT(pago_id) FROM pagos
+-- la query de la línea 315 tuvo output de 55.305 
+
+-- BLOQUE 4: WINDOW FUNCTIONS --
 
 
 
